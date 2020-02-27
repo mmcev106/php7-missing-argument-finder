@@ -41,6 +41,7 @@ class DisallowedFunctionSniff implements Sniff
         '=',
         'exit',
         'elseif',
+        'switch',
     ];
 
     private $definitions = [
@@ -66,7 +67,21 @@ class DisallowedFunctionSniff implements Sniff
         'getTableColumns' => 1,
         'js_escape' => 1,
         'td' => 1,
-        'escape' => 1
+        'escape' => 1,
+        'Libraries' => 1,
+        'Rect' => 4,
+        'Cell' => 5,
+        'MultiCell' => 4,
+        'SetTextColor' => 3,
+        'setPageBuffer' => 3,
+        'SetAutoPageBreak' => 1,
+        'getPDF' => 2,
+        'exportRecords' => 4,
+        'assertCount' => 2,
+        'assertGreaterThan' => 2,
+        'assertEquals' => 2,
+        'AddAttachment' => 1,
+        'SetFrom' => 1,
     ];
 
     private $calls = [];
@@ -77,28 +92,39 @@ class DisallowedFunctionSniff implements Sniff
         $this->IGNORED = array_flip($this->IGNORED);
 
         register_shutdown_function(function(){
-            $errors = [];
-
-            foreach($this->calls as $functionName=>$callInfo){
-                $minArgs = @$this->definitions[$functionName];
-                if($minArgs === null){
-                    if(substr($functionName, 0, 1) === '$'){
-                        // Assume this is a callable variable.
-                        // We have no way of knowing the expected number of arguments, so skip it.
-                        continue;
+            foreach($this->calls as $functionName=>$calls){
+                $lastArgs = null;
+                foreach($calls as $callInfo){
+                    $args = $callInfo['args'];
+                    if($lastArgs != null){
+                        if($args != $lastArgs){
+                            $this->handleArgMismatch($functionName, $callInfo);
+                            break;
+                        }
                     }
 
-                    $errors[] = "The '$functionName' function was called but not defined here: " . $callInfo['location'];
-                }
-                else if($callInfo['args'] < $minArgs){
-                    $errors[] = "Parameters missing for a call to the '$functionName' function here: " . $callInfo['location'];
+                    $lastArgs = $args;
                 }
             }
-
-            echo implode("\n", $errors) . "\n";
         });
 
         return [T_FUNCTION, T_OPEN_PARENTHESIS];
+    }
+
+    private function handleArgMismatch($functionName, $callInfo){
+        $minArgs = @$this->definitions[$functionName];
+        if($minArgs === null){
+            if(substr($functionName, 0, 1) === '$'){
+                // Assume this is a callable variable.
+                // We have no way of knowing the expected number of arguments, so skip it.
+                return;
+            }
+
+            echo "The '$functionName' function was called but not defined here: " . $callInfo['location'] . "\n";
+        }
+        else if($callInfo['args'] < $minArgs){
+            echo "Parameters missing for a call to the '$functionName' function here: " . $callInfo['location'] . "\n";
+        }
     }
 
     function process(File $file, $position)
@@ -106,17 +132,17 @@ class DisallowedFunctionSniff implements Sniff
         $getDefinedFunctionName = function($position) use ($file){
             do {
                 $position++;
-                $content = $file->getTokens()[$position]['content'];
-            } while(in_array($content, [' ', '&']));
-            
-            return $content;
+                $content = trim($file->getTokens()[$position]['content']);
+            } while(in_array($content, ['', '&']));
+
+           return $content;
         };
 
         $getCalledFunctionName = function($position) use ($file){
             do {
                 $position--;
-                $content = $file->getTokens()[$position]['content'];
-            } while($content === ' ');
+                $content = trim($file->getTokens()[$position]['content']);
+            } while($content === '');
 
             $functionName = $content;
 
@@ -208,13 +234,7 @@ class DisallowedFunctionSniff implements Sniff
                     $this->definitions['$' . $functionName] = $minArgs;
                 }
 
-                $callInfo = @$this->calls[$functionName];
-                $oldMin = $callInfo['args'];
-                if($oldMin !== null && $oldMin < $minArgs){
-                    $minArgs = $oldMin;
-                }
-
-                $this->calls[$functionName] = [
+                $this->calls[$functionName][] = [
                     'args' => $minArgs,
                     'location' => $file->path . ':' . $file->getTokens()[$position]['line']
                 ];
