@@ -100,6 +100,11 @@ class DisallowedFunctionSniff implements Sniff
 
         register_shutdown_function(function(){
             foreach($this->calls as $functionName=>$calls){
+                // if(count($calls) === 1){
+                //     $this->handleArgMismatch($functionName, $calls[0]);
+                //     continue;
+                // }
+
                 $lastArgs = null;
                 foreach($calls as $callInfo){
                     $args = $callInfo['args'];
