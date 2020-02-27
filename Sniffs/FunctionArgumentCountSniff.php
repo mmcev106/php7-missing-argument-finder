@@ -33,6 +33,7 @@ class DisallowedFunctionSniff implements Sniff
         '&&',
         'isset',
         'array',
+        'Array',
         '+',
         ',',
         'return',
@@ -42,6 +43,8 @@ class DisallowedFunctionSniff implements Sniff
         'exit',
         'elseif',
         'switch',
+        'list',
+
     ];
 
     private $definitions = [
@@ -80,8 +83,12 @@ class DisallowedFunctionSniff implements Sniff
         'assertCount' => 2,
         'assertGreaterThan' => 2,
         'assertEquals' => 2,
+        'assertSame' => 2,
         'AddAttachment' => 1,
         'SetFrom' => 1,
+        'addIdentifier' => 1,
+        'pre_query' => 1,
+        'deleteRecords' => 1,
     ];
 
     private $calls = [];
@@ -172,11 +179,11 @@ class DisallowedFunctionSniff implements Sniff
             while(true){
                 $position++;
                 $content = $file->getTokens()[$position]['content'];
-                if($content === '('){
+                if(in_array($content, ['(', '['])){
                     $nestingLevel++;
                     continue;
                 }
-                else if($content === ')' && $nestingLevel > 0){
+                else if(in_array($content, [')', ']']) && $nestingLevel > 0){
                     $nestingLevel--;
                     continue;
                 }
@@ -191,6 +198,9 @@ class DisallowedFunctionSniff implements Sniff
 
                 if($nestingLevel === 0){
                     $argCode .= $content;
+                }
+                else{
+                    $argCode .= ' ';
                 }
             }
 
@@ -214,7 +224,12 @@ class DisallowedFunctionSniff implements Sniff
             $minArgs = $getMinArgs($position);
 
             if($this->currentFunctionName){
-                $this->definitions[$this->currentFunctionName] = $minArgs;
+                $existingArgs = @$this->definitions[$this->currentFunctionName];
+
+                if($existingArgs === null || $existingArgs > $minArgs){
+                    $this->definitions[$this->currentFunctionName] = $minArgs;
+                }
+
                 $this->currentFunctionName = null;
             }
             else{
